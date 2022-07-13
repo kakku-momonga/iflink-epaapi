@@ -1,0 +1,1140 @@
+//
+//  Project : ifLink
+//
+//  v4.0 bld47 : 2022/03/09 エス・ジー Androidから移植
+//  Copyright 2022 TOSHIBA DIGITAL SOLUTIONS. All rights reserved.
+//
+
+import Foundation
+import UIKit
+import iflink_common
+
+// MARK: - Android標準クラス群
+// エミュレーション対象のAndoroidクラス群
+// 最低限の動作に必要なクラス/メソッドを作成
+
+// android.content.Intentクラス相当
+public class Intent {
+    // PackageName
+    fileprivate var mPackageName: String = ""
+    // ClassName
+    fileprivate var mClassName: String = ""
+    // Action
+    fileprivate var mAction: String = ""
+    // Extra
+    fileprivate var mExtra: [String: Any] = [:]
+    
+    public init() {
+    }
+    public init(_ action: String) {
+        mAction = action
+    }
+    public init(_ packageContext: Context, _ className: String) {
+        mPackageName = packageContext.getPackageName()
+        mClassName = className
+    }
+    
+    // Action
+    public func getAction() -> String {
+        return mAction
+    }
+    public func setAction(_ action: String) {
+        mAction = action
+    }
+
+    // PackageName
+    public func getPackage() -> String {
+        return mPackageName
+    }
+    public func setPackage(_ packageName: String) -> Intent {
+        mPackageName = packageName
+
+        // PackageNameがActionと同一パッケージなら、ClassNameにActionを設定
+        if !mAction.isEmpty && mAction.hasPrefix(packageName) {
+            mClassName = mAction
+        }
+        return self
+    }
+
+    // ClassName
+    public func getClassName() -> String {
+        return mPackageName
+    }
+    public func setClassName(_ packageName: String, _ className: String) -> Intent {
+        mPackageName = packageName
+        mClassName = className
+        return self
+    }
+
+    // Extra
+    public func hasExtra(_ name: String) -> Bool {
+        if mExtra[name] == nil {
+            return false
+        }
+        return true
+    }
+    public func getIntExtra(_ name: String, _ defaultValue: Int) -> Int {
+        guard let value = mExtra[name] as? Int else {
+            return defaultValue
+        }
+        return value
+    }
+    public func getLongExtra(_ name: String, _ defaultValue: Int64) -> Int64 {
+        guard let value = mExtra[name] as? Int64 else {
+            return defaultValue
+        }
+        return value
+    }
+    public func getStringExtra(_ name: String) -> String? {
+        guard let value = mExtra[name] as? String else {
+            return nil
+        }
+        return value
+    }
+    public func putExtra(_ name: String, _ value: Int) -> Intent {
+        mExtra[name] = value
+        return self
+    }
+    public func putExtra(_ name: String, _ value: Int64) -> Intent {
+        mExtra[name] = value
+        return self
+    }
+    public func putExtra(_ name: String, _ value: String) -> Intent {
+        mExtra[name] = value
+        return self
+    }
+}
+
+// android.context.IntentFilterクラス相当
+public class IntentFilter: Hashable {
+    fileprivate var mAction: String = ""
+
+    public init(_ action: String) {
+        mAction = action
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        mAction.hash(into: &hasher)
+    }
+    
+    public static func == (lhs: IntentFilter, rhs: IntentFilter) -> Bool {
+        return lhs.mAction == rhs.mAction
+    }
+}
+
+// android.content.pm.ServiceInfoクラス相当
+public class ServiceInfo {
+    public var name: String = ""
+    public var packageName: String = ""
+}
+
+// android.content.pm.ResolveInfoクラス相当
+public class ResolveInfo {
+    public var loadLabel: String = ""
+    public var serviceInfo: ServiceInfo = ServiceInfo()
+    
+    init() {
+    }
+}
+
+// android.content.pm.PackageManagerクラス相当
+public class PackageManager {
+    private static var TAG: String { "PackageManager" }
+    private var TAG: String { type(of: self).TAG }
+
+    init() {
+    }
+
+    public func queryIntentServices(_ intent: Intent ) -> [ResolveInfo] {
+        return IfLinkPackageManager.shared.queryIntentServices(intent)
+    }
+
+    // Service以外でもPackageManagerを取得可能にする(エミュレーション用追加関数)
+    public static func getPackageManager() -> PackageManager {
+        return PackageManager()
+    }
+}
+
+// android.content.ComponentNameクラス相当
+public class ComponentName {
+    // Package Name
+    fileprivate var mPackageName: String = ""
+    // Class Name
+    fileprivate var mClassName: String = ""
+    
+    public init(_ pkg: String, _ cls: String) {
+        mPackageName = pkg
+        mClassName = cls
+    }
+}
+
+// android.os.Parcelクラス相当
+// TODO: 仮実装中
+public class Parcel {
+    private var mInterface: String = ""
+    public var mData: String = ""
+
+    public init() {
+    }
+    
+    public func writeInterfaceToken(_ interfaceName: String ) {
+        mInterface = interfaceName
+    }
+}
+
+// android.os.IInterfaceインターフェース相当
+public protocol IInterface: AnyObject {
+    func asBinder() -> IBinder?
+}
+
+// android.os.IBinderインターフェース相当
+public protocol IBinder {
+    func getInterfaceDescriptor() -> String
+
+    func isBinderAlive() -> Bool
+
+    func queryLocalInterface(descriptor: String) -> IInterface?
+
+    func transact(_ var1: Int, _ var2: Parcel, _ var3: inout Parcel, _ var4: Int) -> Bool
+
+    func linkToDeath(_ var1: DeathRecipient, _ var2: Int) throws
+
+    func unlinkToDeath(_ var1: DeathRecipient, _ var2: Int) -> Bool
+}
+
+// android.os.IBinder.DeathRecipientインターフェース相当
+public protocol DeathRecipient {
+    func binderDied()
+}
+
+// android.os.Binder抽象クラス相当
+open class Binder: IBinder {
+    // IInterface
+    unowned private var mInterface: IInterface?
+    // Descriptor
+    private var mDescriptor: String = ""
+
+    public init() {
+    }
+
+    public func attachInterface(_ owner: IInterface, _ descriptor: String) {
+        // IInterfaceとBinderを継承したownerが指定されるはず
+        mInterface = owner
+        mDescriptor = descriptor
+    }
+
+    open func getInterfaceDescriptor() -> String {
+        return mDescriptor
+    }
+
+    public func isBinderAlive() -> Bool {
+        // 同一プロセスで動作時は常にtrueを返す
+        // 将来拡張予定
+        return true
+    }
+
+    public func queryLocalInterface(descriptor: String) -> IInterface? {
+        if mDescriptor != descriptor {
+            return nil
+        }
+        return mInterface
+    }
+
+    public func transact(_ var1: Int, _ var2: Parcel, _ var3: inout Parcel, _ var4: Int) -> Bool {
+        // TODO: プロセス間通信を対応する場合に実装が必要
+        return false
+    }
+
+    public func linkToDeath(_ var1: DeathRecipient, _ var2: Int) throws {
+        // no-op
+    }
+
+    public func unlinkToDeath(_ var1: DeathRecipient, _ var2: Int) -> Bool {
+        // no-op
+        return false
+    }
+
+    open func onTransact(_ code: Int, _ data: String, _ reply: String, _ flags: Int) throws -> Bool {
+        // 派生クラスでoverrideして使う
+        return false
+    }
+}
+
+// android.content.ServiceConnectionインターフェース相当
+open class ServiceConnection {
+    fileprivate var mComponentName: ComponentName?
+
+    public init() {
+    }
+
+    // abstract
+    open func onServiceConnected(_ name: ComponentName, _ service: IBinder) {
+    }
+
+    // abstract
+    open func onServiceDisconnected(_ name: ComponentName) {
+    }
+}
+
+// android.context.BroadcastReceiver抽象クラス相当
+open class BroadcastReceiver {
+    public init() {
+    }
+
+    // abstract
+    open func onReceive(_ context: Context, _ intent: Intent) {
+    }
+}
+
+// android.content.Context抽象クラス相当
+open class Context {
+    // Context毎にDispatchQueue(直列)を用意する（エミュレーション用）
+    lazy private var contextQueue: DispatchQueue = DispatchQueue(label: self.getPackageName(), qos: .default)
+    public func dispatchQueue() -> DispatchQueue {
+        return contextQueue
+    }
+
+    public required init() {
+    }
+
+    public static let MODE_PRIVATE = 0
+    public static let BIND_AUTO_CREATE = 1
+
+    // abstract
+    open func getPackageName() -> String {
+        return ""
+    }
+    
+    // abstract
+    // TODO: 戻り値の型は暫定
+    open func getDir(_ name: String, _ mode: Int) -> AnyObject? {
+        return nil
+    }
+
+    // abstract
+    open func bindService(_ service: Intent, _ conn: ServiceConnection, _ flags: Int) -> Bool {
+        return false
+    }
+
+    // abstract
+    open func unbindService(_ conn: ServiceConnection) {
+    }
+
+    // obsolete
+    open func startService(_ service: Intent) -> ComponentName? {
+        return startForegroundService(service)
+    }
+
+    // abstract
+    open func startForegroundService(_ service: Intent) -> ComponentName? {
+        return nil
+    }
+
+    // abstract
+    open func stopService(_ name: Intent) -> Bool {
+        return true
+    }
+
+    // abstract
+    open func registerReceiver(_ receiver: BroadcastReceiver, _ filter: IntentFilter) -> Intent? {
+        return nil
+    }
+
+    // abstract
+    open func unregisterReceiver(_ receiver: BroadcastReceiver) {
+    }
+
+    // abstract
+    open func sendBroadcast(_ intent: Intent) {
+    }
+}
+
+// android.context.ContextWrapperクラス相当
+open class ContextWrapper: Context {
+    private static var TAG: String { "ContextWrapper" }
+    private var TAG: String { type(of: self).TAG }
+
+    // ComponentName
+    fileprivate var mComponentName: ComponentName?
+    
+    public required init() {
+    }
+
+    // メンバー初期化処理
+    fileprivate func _Init(_ name: String) {
+        mComponentName = ComponentName(name, name)
+    }
+    
+    open func getPackageManager() -> PackageManager {
+        return PackageManager()
+    }
+
+    // アプリケーションのパッケージ名を返す
+    override open func getPackageName() -> String {
+        if mComponentName == nil {
+            return ""
+        }
+        return mComponentName!.mPackageName
+    }
+    
+    // 自身のコンテキストを返す
+    open func getBaseContext() -> Context {
+        return self
+    }
+
+    // 指定フォルダを作成し返す
+    override open func getDir(_ name: String, _ mode: Int) -> AnyObject? {
+        return nil
+    }
+
+    // IntentのClassNameに指定されたServiceにIntentを送る
+    override open func startForegroundService(_ service: Intent) -> ComponentName? {
+        Log.s(TAG, true, "caller:\(self) service(ClassName):\(service.mClassName)")
+        defer { Log.s(TAG, false) }
+
+        // サービス制御取得
+        guard let serviceController = IfLinkPackageManager.shared.getServiceController(service.mClassName) else {
+            // IfLinkシステムが管理するServiceに含まれていない
+            Log.e(TAG, "startForegroundService() invalid service:\(service.mClassName)")
+            return nil
+        }
+
+        // Service生成
+        if !serviceController.execCreate(service.mClassName) {
+            // Service生成エラー
+            Log.e(TAG, "startForegroundService() create error service:\(service.mClassName)")
+            return nil
+        }
+
+        // Service開始
+        serviceController.execStartCommand(service.mClassName, service, 0, 0)
+
+        // TODO: Actionに指定されたServiceのComponentNameを返すのが正解？
+        return mComponentName
+    }
+
+    // IntentのClassNameに指定されたServiceを停止する
+    override open func stopService(_ name: Intent) -> Bool {
+        Log.s(TAG, true, "caller:\(self) name(ClassName):\(name.mClassName)")
+        defer { Log.s(TAG, false) }
+
+        // サービス制御取得
+        guard let serviceController = IfLinkPackageManager.shared.getServiceController(name.mClassName) else {
+            // IfLinkシステムが管理するServiceに含まれていない
+            Log.e(TAG, "stopService() invalid service:\(name.mClassName)")
+            return false
+        }
+
+        // Service停止
+        _ = serviceController.execStop(name.mClassName)
+
+        // Serviceインスタンス破棄
+        // TODO: 停止完了したらインスタンス破棄？
+
+        return true
+    }
+
+    // IntentのClassNameに指定されたServiceと接続し、IBinderを返す
+    override open func bindService(_ service: Intent, _ conn: ServiceConnection, _ flags: Int) -> Bool {
+        Log.s(TAG, true, "caller:\(self) service(ClassName):\(service.mClassName)")
+        defer { Log.s(TAG, false) }
+
+        // サービス制御取得
+        guard let serviceController = IfLinkPackageManager.shared.getServiceController(service.mClassName) else {
+            // IfLinkシステムが管理するServiceに含まれていない
+            Log.e(TAG, "bindService() invalid service:\(service.mClassName)")
+            return false
+        }
+
+        // Service生成
+        if !serviceController.execCreate(service.mClassName) {
+            // Service生成エラー
+            Log.e(TAG, "bindService() create error service:\(service.mClassName)")
+            return false
+        }
+
+        // Serviceバインド
+        guard let binder = serviceController.execBind(service.mClassName, service, conn) else {
+            // ServiceがBindを許可していない
+            return false
+        }
+
+        // Service接続結果通知
+        if !serviceController.execServiceConnected(service.mClassName, self, conn, binder) {
+            //
+            return false
+        }
+
+        return true
+    }
+
+    override open func unbindService(_ conn: ServiceConnection) {
+        // ServiceConnectionから接続先Service名を取得
+        let serviceName = conn.mComponentName!.mPackageName
+        Log.s(TAG, true, "caller:\(self) serviceName:\(serviceName)")
+        defer { Log.s(TAG, false) }
+
+        // サービス制御取得
+        guard let serviceController = IfLinkPackageManager.shared.getServiceController(serviceName) else {
+            // IfLinkシステムが管理するServiceに含まれていない
+            Log.e(TAG, "unbindService() invalid service:\(serviceName)")
+            return
+        }
+
+        // Serviceアンバインド
+        serviceController.execUnbind(serviceName, conn)
+
+        // Service切断通知
+        // TODO: 未実装
+//        serviceController.execServiceDisonnected(self, conn, binder)
+
+        return
+    }
+
+    // ブロードキャスト送信先一覧
+    private static var mBroadcastReceiverList: [IntentFilter: BroadcastReceiver] = [:]
+    
+    // Intentに合致するブロードキャストの受信登録
+    override public func registerReceiver(_ receiver: BroadcastReceiver, _ filter: IntentFilter) -> Intent? {
+        ContextWrapper.mBroadcastReceiverList[ filter ] = receiver
+        return nil
+    }
+
+    // 指定ブロードキャストの受信登録解除
+    override public func unregisterReceiver(_ receiver: BroadcastReceiver) {
+        for bc in ContextWrapper.mBroadcastReceiverList where bc.value === receiver {
+            ContextWrapper.mBroadcastReceiverList[ bc.key ] = nil
+        }
+    }
+
+    // ブロードキャスト送信
+    override public func sendBroadcast(_ intent: Intent) {
+        Log.s(TAG, true, "caller:\(self) intent:\(intent.mAction)")
+        defer { Log.s(TAG, false) }
+        // asynchronous
+        for bc in ContextWrapper.mBroadcastReceiverList where bc.key.mAction == intent.mAction {
+            Log.s(TAG, nil, "callee:\(type(of: bc.value))")
+            // 非同期/複数同時実行
+            DispatchQueue.global().async {
+                bc.value.onReceive( self, intent )
+            }
+        }
+    }
+}
+
+// android.app.Service抽象クラス相当
+open class Service: ContextWrapper {
+    public static let START_NOT_STICKY = 2
+    public static let START_STICKY = 1
+
+    public final func stopSelf() {
+        let intent = Intent()
+        _ = intent.setClassName(mComponentName!.mPackageName, mComponentName!.mClassName)
+        _ = stopService(intent)
+    }
+
+    // abstract
+    open func onCreate() {
+    }
+
+    // abstract
+    open func onDestroy() {
+    }
+
+    // abstract
+    open func onStartCommand(_ service: Intent) -> Int {
+        return 0
+    }
+
+    // abstract
+    open func onStartCommand(_ intent: Intent?, _ flags: Int, _ startId: Int) -> Int {
+        return 0
+    }
+
+    // abstract
+    open func onBind(_ intent: Intent) throws -> IBinder? {
+        return nil
+    }
+
+    // abstract
+    open func onUnbind(_ intent: Intent) -> Bool {
+        return true
+    }
+}
+
+// android.os.RemoteCallbackListクラス相当
+public class RemoteCallbackList<T> {
+    // MEMO: init時に、TもしくはT.Stubからcontextを取り出すべきか？
+    // MEMO: DispatchQueueに関する制御は、エミュレーション層の中で閉じるようにしたい。
+    
+    // TODO: extensionした側で修正したいのでpublicにしておく
+    public var mList: [(String, T)] = []
+    public var mListLock = NSRecursiveLock()
+
+    public init() {
+    }
+
+    public func kill() {
+    }
+
+    public func register(_ callback: T) -> Bool {
+        return register(callback, "")
+    }
+
+    public func register(_ callback: T, _ cookie: String) -> Bool {
+        // T毎の直列キューで非同期実行するので、
+        // 使用する型で個別にextensionする
+        Log.e( "RemoteCallbackList", "register() error")
+        return false
+    }
+
+    public func unregister(_ callback: T) -> Bool {
+        // 引数とリストのオブジェクトが一致する場合に削除するので、
+        // 使用する型で個別にextensionする
+        Log.e( "RemoteCallbackList", "unregister() error")
+        return false
+    }
+
+    public func beginBroadcast() -> Int {
+        // リストの個数を返す
+        return mList.count
+    }
+
+    public func getBroadcastItem(_ index: Int) -> T? {
+        // リストのindex番目のアイテムを返す
+        if index < 0 || mList.count <= index {
+            return nil
+        }
+        let (_, callback) = mList[index]
+        return callback
+    }
+
+    public func getBroadcastCookie(_ index: Int) -> String? {
+        // リストのindex番目のクッキーを返す
+        if index < 0 || mList.count <= index {
+            return nil
+        }
+        let (cookie, _) = mList[index]
+        return cookie
+    }
+
+    public func finishBroadcast() {
+    }
+}
+
+// MARK: - エミュレーション用クラス群
+// IfLinkとしてAndroidのService動作をエミュレーションするためのクラス
+// 別アプリで動作するServiceも管理可能とする
+
+// エミュレーション用のパッケージ管理クラス
+public class IfLinkPackageManager {
+    private static var TAG: String { "IfLinkPackageManager" }
+    private var TAG: String { type(of: self).TAG }
+    public static let shared = IfLinkPackageManager()
+
+    // IfLinkシステムが管理するService一覧
+    private var servicePackageList: [String: AndroidServicePackage] = [:]
+
+    private init() {
+    }
+
+    public func queryIntentServices(_ intent: Intent ) -> [ResolveInfo] {
+        // 本来はintentのActionで指定されたものを返すが、エミュレーションでは全てを返す
+        var resolveInfoList: [ResolveInfo] = []
+        for (pkgName, servicePackage) in servicePackageList {
+            let resolveInfo = ResolveInfo()
+            resolveInfo.loadLabel = servicePackage.loadLabel
+            resolveInfo.serviceInfo.packageName = pkgName
+            resolveInfo.serviceInfo.name = pkgName
+            resolveInfoList.append(resolveInfo)
+        }
+        return resolveInfoList
+    }
+
+    // IfLinkシステム内Serviceに追加
+    public func append(_ loadLabel: String, packageName: String, type: Service.Type) {
+        servicePackageList[packageName] = AndroidServicePackage(loadLabel, packageName, type)
+        Log.s(TAG, nil, "loadLabel:[\(loadLabel)] packageName:[\(packageName)] type:[\(type)]")
+    }
+
+    // IfLinkシステム内Serviceに追加
+    public func append(_ loadLabel: String, packageName: String, scheme: String) {
+        servicePackageList[packageName] = AndroidServicePackage(loadLabel, packageName, scheme)
+        Log.s(TAG, nil, "loadLabel:[\(loadLabel)] packageName:[\(packageName)] scheme:[\(scheme)]")
+    }
+
+    // Serviceインスタンス取得
+    // TODO:
+    //  サービス一覧/詳細でサービス再起動を実施時にPackageConnectorから呼ばれている。
+    //  Android版では、PackageConnectorのstartService/stopServiceがContextを引数にもらっている。
+    //  iOS版でもServiceModelがContextWrapperを継承して、selfを渡せば動くはず。
+    //  →上記対応で動作したら、このメソッドは削除する。
+    public func getServiceInstance(_ serviceName: String) -> Service? {
+        guard let servicePackage = servicePackageList[serviceName] else {
+            // IfLinkシステムが管理するServiceに含まれていない
+            return nil
+        }
+
+        if let serviceController = servicePackage.getServiceController() as? LocalCallServiceController {
+            // アプリ内Service用サービス制御生成済みの場合
+            return serviceController.serviceInstance
+        }
+
+        return nil
+    }
+
+    // Serviceパッケージ取得
+    fileprivate func getServicePackage(_ serviceName: String) -> AndroidServicePackage? {
+        guard let servicePackage = servicePackageList[serviceName] else {
+            // IfLinkシステムが管理するServiceに含まれていない
+            return nil
+        }
+        
+        return servicePackage
+    }
+
+    // サービス制御取得
+    fileprivate func getServiceController(_ serviceName: String) -> ServiceController? {
+        guard let servicePackage = servicePackageList[serviceName] else {
+            // IfLinkシステムが管理するServiceに含まれていない
+            return nil
+        }
+
+        if let serviceController = servicePackage.getServiceController() {
+            // サービス制御生成済みの場合
+            return serviceController
+        }
+
+        guard let serviceController = servicePackage.createServiceController() else {
+            // サービス制御生成失敗
+            return nil
+        }
+        
+        // サービス制御接続
+        if serviceController.connectService() != true {
+            // サービスとの接続失敗
+            return nil
+        }
+
+        servicePackage.setServiceController(serviceController)
+        return serviceController
+    }
+}
+
+// エミュレーション用のServiceパッケージ情報
+private class AndroidServicePackage {
+    private static var TAG: String { "AndroidServicePackage" }
+    private var TAG: String { type(of: self).TAG }
+    // ラベル
+    var loadLabel: String
+
+    // パッケージ名
+    var packageName: String
+    
+    // Serviceのクラスインスタンス(プロセス内の場合に使用)
+    var mType: Service.Type?
+
+    // Serviceのスキーマ名(プロセス外の場合に使用)
+    var mScheme: String?
+
+    // Serviceの状態
+    var mStatus: Status = .notRunning
+    enum Status {
+        // TODO: 暫定実装
+        case notRunning
+        case running
+    }
+
+    // サービス制御
+    var mServiceController: ServiceController?
+    
+    // IfLinkプロセス内の場合に使用
+    
+    // IfLinkプロセス外の場合に使用
+    // TODO: 以下を管理する想定
+    // ・IfLink側ソケット
+    // など
+
+    init(_ loadLabel: String, _ packageName: String, _ mType: Service.Type) {
+        self.loadLabel = loadLabel
+        self.packageName = packageName
+        self.mType = mType
+    }
+
+    init(_ loadLabel: String, _ packageName: String, _ schemeName: String) {
+        self.loadLabel = loadLabel
+        self.packageName = packageName
+        self.mScheme = schemeName
+    }
+
+    // TODO: 内部用なのでmStatusで直接判断するべきか？
+    var isRunning: Bool { get { if mStatus == .running { return true } else { return false } } }
+
+    // サービス制御取得
+    func getServiceController() -> ServiceController? {
+        return mServiceController
+    }
+
+    // サービス制御設定
+    func setServiceController(_ serviceController: ServiceController) {
+        mServiceController = serviceController
+    }
+
+    // サービス制御生成
+    func createServiceController() -> ServiceController? {
+        // Serviceクラスのインスタンスを確認
+        if mType != nil {
+            // アプリ内Service用サービス制御を生成
+            if false {
+                return LocalSendServiceController()
+            } else {
+                return LocalCallServiceController()
+            }
+        } else {
+            // ifLinkアプリ/アドオンアプリ判定
+            // TODO:
+            //  ビルド時(ifdef)に区別するか、実行時に区別するか。
+            //  誤動作リスクを減らすには、ビルド時に判別するべき。
+            //  現状、仮でifLinkアプリ固定にしておく。
+//            if true {
+                // ifLinkアプリの場合、アドオンアプリ内Service用サービス制御を生成
+                return AddonAppServiceController()
+//            } else {
+//                // アドオンアプリの場合、ifLinkアプリ内Service用サービス制御を生成
+//                return IfLinkAppServiceController()
+//            }
+        }
+    }
+}
+
+// サービス制御クラス
+private class ServiceController {
+    // 自身の情報の排他制御用
+    fileprivate var mLock: NSLock = NSLock()
+
+    init() {
+    }
+
+    // abstract
+    // サービス接続
+    func connectService() -> Bool {
+        return false
+    }
+
+    // abstract
+    // サービスを生成
+    func execCreate(_ serviceName: String) -> Bool {
+        return false
+    }
+
+    // abstract
+    // サービスを開始
+    func execStartCommand(_ serviceName: String, _ intent: Intent?, _ flags: Int, _ startId: Int) -> Bool {
+        return false
+    }
+
+    // abstract
+    // サービスを停止
+    func execStop(_ serviceName: String) -> Bool {
+        return false
+    }
+
+    // abstract
+    // サービスをバインド
+    func execBind(_ serviceName: String, _ service: Intent, _ conn: ServiceConnection) -> IBinder? {
+        return nil
+    }
+
+    // abstract
+    // サービスをアンバインド
+    func execUnbind(_ serviceName: String, _ conn: ServiceConnection) {
+    }
+
+    // abstract
+    // 呼び出し元サービスに接続完了を通知
+    func execServiceConnected(_ serviceName: String, _ caller: ContextWrapper, _ conn: ServiceConnection, _ binder: IBinder) -> Bool {
+        return false
+    }
+}
+
+// アプリ内(直接呼出)Service用サービス制御
+private class LocalCallServiceController: ServiceController {
+    private static var TAG: String { "LocalCallServiceController" }
+    private var TAG: String { type(of: self).TAG }
+
+    // Serviceのインスタンス
+    fileprivate var serviceInstance: Service?
+
+    // サービス制御接続
+    override func connectService() -> Bool {
+        return true
+    }
+
+    override func execCreate(_ serviceName: String) -> Bool {
+        // Serviceパッケージ取得
+        guard let servicePackage = IfLinkPackageManager.shared.getServicePackage(serviceName) else {
+            // IfLinkシステムが管理するServiceに含まれていない
+            Log.e(TAG, "execCreate() invalid service:\(serviceName)")
+            return false
+        }
+        defer { mLock.unlock() }
+        mLock.lock()
+
+        // 生成済みなら何もしない
+        if serviceInstance != nil {
+            return true
+        }
+
+        if servicePackage.mType == nil {
+            // クラス情報がない
+            return false
+        }
+
+        // Serviceインスタンスを生成する
+        let serviceObject = servicePackage.mType!.init()
+        serviceObject._Init(servicePackage.packageName)
+        serviceInstance = serviceObject
+
+        // 他アプリと通信するためのNWListener生成
+        // TODO: 後日対応予定
+        
+        // Service状態設定
+        // TODO: 要否判断が必要
+        servicePackage.mStatus = .running
+
+        // Service#onCreate呼び出し（非同期）
+        Log.s(TAG, nil, "Queue(async):\(servicePackage.packageName) onCreate()")
+        serviceObject.dispatchQueue().async {
+            serviceObject.onCreate()
+        }
+
+        return true
+    }
+    
+    override func execStartCommand(_ serviceName: String, _ intent: Intent?, _ flags: Int, _ startId: Int) -> Bool {
+        // Serviceパッケージ取得
+        guard let servicePackage = IfLinkPackageManager.shared.getServicePackage(serviceName) else {
+            // IfLinkシステムが管理するServiceに含まれていない
+            Log.e(TAG, "execStartCommand() invalid service:\(serviceName)")
+            return false
+        }
+        defer { mLock.unlock() }
+        mLock.lock()
+
+        // 未生成なら何もしない
+        if serviceInstance == nil {
+            return false
+        }
+
+        // Service#onStartCommand呼び出し（非同期）
+        Log.s(TAG, nil, "Queue(async):\(servicePackage.packageName) onStartCommand()")
+        serviceInstance?.dispatchQueue().async {
+            _ = self.serviceInstance?.onStartCommand(intent, flags, startId)
+        }
+
+        return true
+    }
+    
+    override func execStop(_ serviceName: String) -> Bool {
+        // Serviceパッケージ取得
+        guard let servicePackage = IfLinkPackageManager.shared.getServicePackage(serviceName) else {
+            // IfLinkシステムが管理するServiceに含まれていない
+            Log.e(TAG, "execStop() invalid service:\(serviceName)")
+            return false
+        }
+        defer { mLock.unlock() }
+        mLock.lock()
+
+        // 未生成なら何もしない
+        if serviceInstance == nil {
+            return false
+        }
+
+        // TODO:
+        // epa停止時にIfLinkServiceに対してstopServiceを呼び出しているが、Android版ではonDestroyは呼ばれない。
+        // iOS版で終了処理(onUnbind/onServiceDisconnected)も未対応なので、onDestroyも実施しない。
+/*
+        // 先にリストから削除する
+        self.serviceInstance = nil
+        self.mStatus = .notRunning
+
+        // Service#onDestroy呼び出し（非同期）
+        Log.s(TAG, nil, "Queue(async):\(packageName) onDestroy()")
+        service.dispatchQueue().async {
+            service.onDestroy()
+        }
+*/
+        return true
+    }
+
+    override func execBind(_ serviceName: String, _ service: Intent, _ conn: ServiceConnection) -> IBinder? {
+        // Serviceパッケージ取得
+        guard let servicePackage = IfLinkPackageManager.shared.getServicePackage(serviceName) else {
+            // IfLinkシステムが管理するServiceに含まれていない
+            Log.e(TAG, "execBind() invalid service:\(serviceName)")
+            return nil
+        }
+        defer { mLock.unlock() }
+        mLock.lock()
+
+        // 未生成なら何もしない
+        if serviceInstance == nil {
+            return nil
+        }
+
+        // Service#onBind呼び出し（同期）
+        var binder: IBinder?
+        Log.s(TAG, nil, "Queue(sync):\(servicePackage.packageName) onBind()")
+        serviceInstance!.dispatchQueue().sync {
+            binder = try! serviceInstance?.onBind(service)
+        }
+        return binder
+    }
+
+    override func execUnbind(_ serviceName: String, _ conn: ServiceConnection) {
+        // TODO: 未実装
+        // Binderを取得・削除
+
+        // TODO: 未実装
+        // 全てのクライアントがServiceと切断した場合
+        // Service#onUnbind呼び出し（同期）
+
+        // TODO: 動作未検証
+/*
+        // ServiceConnection#onServiceDisconnected呼び出し（非同期/同期）
+        if let callerService = self as? Service {
+            // 呼び出し元がServiceの場合、そのContextのキューで実施（同期）
+            Log.s(TAG, nil, "Queue(sync):\(conn.mComponentName!.mPackageName) onServiceDisconnected()")
+            callerService.dispatchQueue().sync {
+                conn.onServiceDisconnected(conn.mComponentName!)
+            }
+        } else {
+            // 呼び出し元がService以外（つまりModel層）の場合、そのまま同期で実施
+            conn.onServiceDisconnected(conn.mComponentName!)
+        }
+*/
+
+        return
+    }
+
+    override func execServiceConnected(_ serviceName: String, _ caller: ContextWrapper, _ conn: ServiceConnection, _ binder: IBinder) -> Bool {
+        // Serviceパッケージ取得
+        guard let servicePackage = IfLinkPackageManager.shared.getServicePackage(serviceName) else {
+            // IfLinkシステムが管理するServiceに含まれていない
+            Log.e(TAG, "execServiceConnected() invalid service:\(serviceName)")
+            return false
+        }
+        defer { mLock.unlock() }
+        mLock.lock()
+
+        // ServiceのComponentNameを作成（エミュレーション用）
+        // MEMO: unbind時には、誰が誰に接続したのかの情報が必要になるはず。
+        conn.mComponentName = ComponentName( serviceInstance!.mComponentName!.mPackageName, serviceInstance!.mComponentName!.mClassName)
+        
+        // ServiceConnection#onConnected呼び出し（非同期/同期）
+        if let callerService = caller as? Service {
+            // 呼び出し元がServiceの場合、そのContextのキューで実施（非同期）
+            Log.s(TAG, nil, "Queue(async):\(conn.mComponentName!.mPackageName) onServiceConnected()")
+            callerService.dispatchQueue().async {
+                conn.onServiceConnected(conn.mComponentName!, binder)
+            }
+        } else {
+            // 呼び出し元がService以外（つまりModel層）の場合、そのまま同期で実施
+            conn.onServiceConnected(conn.mComponentName!, binder)
+        }
+
+        return true
+    }
+}
+
+// アプリ内(通信)Service用サービス制御
+private class LocalSendServiceController: LocalCallServiceController {
+    private static var TAG: String { "LocalSendServiceController" }
+    private var TAG: String { type(of: self).TAG }
+}
+
+// アドオンアプリ内Service用サービス制御
+private class AddonAppServiceController: ServiceController {
+    private static var TAG: String { "AddonAppServiceController" }
+    private var TAG: String { type(of: self).TAG }
+
+    // サービス制御接続
+    override func connectService() -> Bool {
+        // TODO: 後日対応予定
+        return false
+    }
+
+    override func execCreate(_ serviceName: String) -> Bool {
+        // Serviceパッケージ取得
+        guard let servicePackage = IfLinkPackageManager.shared.getServicePackage(serviceName) else {
+            // IfLinkシステムが管理するServiceに含まれていない
+            Log.e(TAG, "execCreate() invalid service:\(serviceName)")
+            return false
+        }
+        defer { mLock.unlock() }
+        mLock.lock()
+
+        // 生成済みなら何もしない
+        if servicePackage.mStatus == .running {
+            return true
+        }
+
+        // TODO: 暫定
+        let urlString = "\(servicePackage.mScheme!)://launch_ims?portno=50080"
+        if let url = URL(string: urlString) {
+            let semaphore = DispatchSemaphore(value: 0)
+
+            // スキーマ起動は、mainから呼ぶ必要がある
+            DispatchQueue.main.async {
+                UIApplication.shared.open(url, options: [:]) { success in
+                    defer { semaphore.signal() }
+                    if success {
+                        // オープン成功
+                        print("scheme-open OK")
+                        servicePackage.mStatus = .running
+                    } else {
+                        // オープン失敗
+                        // TODO: 失敗要因の判別方法は別途、調査が必要
+                        // ・指定スキーマのアプリが存在しない
+                        // 　→外部IMSがアンインストールされたと判断して、パッケージ管理から削除する？
+                        // ・ifLinkアプリがVisibleでない
+                        // 　→リトライする。アプリがVisbleか判定して、そもそも非Visibleなら呼ばないべきか？
+                        print("scheme-open NG")
+                    }
+                }
+            }
+            // TODO:
+            // openに結果は同期で待つ必要がある。
+            // さらに、複数の外部IMSが存在する場合、１つ目を起動した後、ifLink本体がVisibleに戻る前に、
+            // ２つ目の外部IMS起動を呼ぶと必ずエラーになるので、数秒程度は待つ方がよいと思われる。
+            semaphore.wait()
+        }
+        if servicePackage.mStatus != .running {
+            // 起動失敗の場合
+            return false
+        }
+
+        // Service#onCreate呼び出し（非同期）
+        // TODO: ifLink本体が、Visibleに戻っていなくても、実施して問題ない
+        return true
+    }
+    
+    override func execStartCommand(_ serviceName: String, _ intent: Intent?, _ flags: Int, _ startId: Int) -> Bool {
+        return false
+    }
+    
+    override func execStop(_ serviceName: String) -> Bool {
+        return false
+    }
+
+    override func execBind(_ serviceName: String, _ service: Intent, _ conn: ServiceConnection) -> IBinder? {
+        return nil
+    }
+
+    override func execUnbind(_ serviceName: String, _ conn: ServiceConnection) {
+    }
+
+    override func execServiceConnected(_ serviceName: String, _ caller: ContextWrapper, _ conn: ServiceConnection, _ binder: IBinder) -> Bool {
+        return false
+    }
+}

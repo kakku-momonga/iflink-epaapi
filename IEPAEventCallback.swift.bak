@@ -1,0 +1,171 @@
+//
+//  Project : ifLink
+//
+//  v4.0 bld47 : 2022/03/09 エス・ジー Androidから移植
+//  Copyright 2022 TOSHIBA DIGITAL SOLUTIONS. All rights reserved.
+//
+
+import Foundation
+
+public protocol IEPAEventCallback: IInterface {
+    // コールバック実行用DispatchQuqueを取得
+    func dispatchQueue() -> DispatchQueue?
+    
+    /**
+     * イベントデータの取得.
+     * <p>
+     * EPAServiceからコールバックで取得するイベントデータを取得します。<br>
+     * </p>
+     * @param values エントリされたデータ
+     */
+    func getEvent(_ values: [String: Any])
+}
+
+/** Local-side IPC implementation stub class. */
+open class IEPAEventCallbackStub: Binder, IEPAEventCallback {
+    static var DESCRIPTOR: String { "jp.co.toshiba.iflink.epaapi.IEPAEventCallback" }
+
+    // コールバック実行用DispatchQuqueを取得
+    open func dispatchQueue() -> DispatchQueue? {
+        return nil
+    }
+
+    /** Construct the stub at attach it to the interface. */
+    override public init() {
+        super.init()
+        self.attachInterface(self, IEPAEventCallbackStub.DESCRIPTOR)
+    }
+    
+    /**
+     * Cast an IBinder object into an jp.co.toshiba.iflink.epaapi.IEPAEventCallback interface,
+     * generating a proxy if needed.
+     */
+    public static func asInterface(_ obj: IBinder? ) -> IEPAEventCallback? {
+        if obj == nil {
+          return nil
+        }
+        if let iin = obj!.queryLocalInterface( descriptor: self.DESCRIPTOR) as? IEPAEventCallback {
+            return iin
+        }
+        return IEPAEventCallbackStubProxy(obj!)
+    }
+    
+    open func asBinder() -> IBinder? {
+        return self
+    }
+    
+    override open func onTransact(_ code: Int, _ data: String, _ reply: String, _ flags: Int) throws -> Bool {
+        let descriptor = IEPAEventCallbackStub.DESCRIPTOR
+        let enumCode = IEPAEventCallbackCode(rawValue: code)
+        switch enumCode {
+        case .TRANSACTION_getEvent:
+            // TODO: Proxy実装時に対応
+            return true
+        default:
+            return try super.onTransact(code, data, reply, flags)
+        }
+    }
+
+    enum IEPAEventCallbackCode: Int {
+        case TRANSACTION_getEvent
+    }
+
+    // Swiftでは抽象クラスを作成できないので空関数で実装
+    open func getEvent(_ values: [String: Any]) {
+    }
+
+    public static func setDefaultImpl(_ impl: IEPAEventCallback?) throws -> Bool {
+      // Only one user of this interface can use this function
+      // at a time. This is a heuristic to detect if two different
+      // users in the same process use this function.
+      if IEPAEventCallbackStubProxy.sDefaultImpl != nil {
+          throw NSError(domain: "sDefaultImpl is not nil.", code: -1, userInfo: nil)
+      }
+      if impl != nil {
+          IEPAEventCallbackStubProxy.sDefaultImpl = impl
+        return true
+      }
+      return false
+    }
+    
+    public static func getDefaultImpl() -> IEPAEventCallback? {
+      return IEPAEventCallbackStubProxy.sDefaultImpl
+    }
+}
+
+open class IEPAEventCallbackStubProxy: Binder, IEPAEventCallback {
+    // コールバック実行用DispatchQuqueを取得
+    open func dispatchQueue() -> DispatchQueue? {
+        return nil
+    }
+
+    private var mRemote: IBinder?
+    init(_ remote: IBinder) {
+        mRemote = remote
+    }
+    
+    public func asBinder() -> IBinder? {
+        return mRemote
+    }
+    
+    override public func getInterfaceDescriptor() -> String {
+        return IEPAEventCallbackStub.DESCRIPTOR
+    }
+
+    open func getEvent(_ values: [String: Any]) {
+        // TODO: Proxy実装時に対応
+    }
+
+    static var sDefaultImpl: IEPAEventCallback?
+}
+
+// Callback通知を直列キューで非同期実施する
+extension RemoteCallbackList where T == IEPAEventCallback {
+    // MEMO:
+    // RemoteCallbackList<IEPAEventCallback>のregisterには、複数のServiceからオブジェクトが渡される。
+    // コールバック処理を呼び出す時は、最終的に各Serviceのコンテキストにて、実行する必要がある。
+    // 暫定で、IEPAEventCallbackに自身を持つServiceへのDispatchQueueを取得するメソッドを追加。
+    // これにより、呼び出し側/呼ばれる側の双方でコンテキストを意識しないで利用可能。
+
+    // 非同期処理用Callbackクラス
+    private class EPAEventCallbackAsync: IEPAEventCallbackStub {
+        private var queue: DispatchQueue?
+        var async: IEPAEventCallback?
+
+        init( _ proxy: IEPAEventCallback) {
+            self.async = proxy
+            self.queue = proxy.dispatchQueue()
+            if self.queue == nil {
+                self.queue = DispatchQueue.global()
+            }
+        }
+
+        override public func getEvent(_ values: [String: Any]) {
+            queue?.async {
+                self.async?.getEvent(values)
+            }
+        }
+    }
+
+    public func register(_ callback: IEPAEventCallback) -> Bool {
+        return register(callback, "")
+    }
+    
+    public func register(_ callback: IEPAEventCallback, _ cookie: String) -> Bool {
+        mList.append( (cookie, EPAEventCallbackAsync(callback)))
+        return true
+    }
+
+    public func unregister(_ callback: IEPAEventCallback) -> Bool {
+        for index in 0..<mList.count {
+            let (_, value) = mList[index]
+            if let value = value as? EPAEventCallbackAsync {
+                if callback === value.async {
+                    mList.remove(at: index)
+                    return true
+                }
+            }
+        }
+        return false
+    }
+}
